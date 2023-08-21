@@ -1,0 +1,167 @@
+
+                Techniques Towards
+        Automatic Visual Obstacle Avoidance
+
+
+                 Hans P. Moravec
+
+       Stanford University, February 27, 1976
+
+
+Abstract
+
+	This paper describes some components of a working system which
+drives a vehicle through cluttered real world environments under
+computer control, guided by images perceived through an onboard
+television camera. The emphasis is on reliable and fast low level
+visual techniques which determine the existence and location of
+objects in the world, but do not identify them.  They include an
+interest operator for choosing distinctive regions in images, a
+correlator for finding matching regions in similar images, a geometric
+camera solver which determines camera displacement and distance to
+objects from motion stereo information and an automatic distortion
+corrector which compensates for camera imperfections.
+
+
+Keywords
+
+Computer vision, obstacle avoidance, correlation, image processing,
+pattern recognition, navigation, guidance
+
+Introduction
+
+	This report describes work towards autonomous vehicles able to
+maneuver through cluttered environments.  The emphasis has been on
+visual techniques which locate the clutter in three dimensions, but do
+not determine its nature.
+
+	Our hardware includes an electric vehicle, called the cart,
+remotely controlled over a citizens band radio link by a PDP-KL10. It
+carries a black and white television camera whose picture is broadcast
+over a UHF channel, and received and occasionally digitized by the
+computer. The vehicle has drive motors for the rear wheels, a steering
+motor coupled to a steering bar arrangement on the front wheels, and a
+motor controlling the camera pan angle.  Each can be commanded to run
+forward or backward. There is a potentiometer on the steering and pan
+linkages which enables them to be commanded to point straight ahead.
+The mechanical arrangements are crude, the motor speeds are
+unregulated, and there is no feedback to the computer other than the
+video from the camera.  Overall dead reckoning errors are on the order
+of 30%.  Most of the computer controlled runs so far have been with
+the camera pointed straight ahead and the vehicle moving forward in
+two foot increments, punctuated by long pauses, during which the
+images are processed.
+
+	The key elements in the vision software are two primitive
+picture operators and a geometric camera solver.  The interest
+operator locates small patches, called features, scattered more or
+less uniformly over images and having the property that the
+corresponding points are likely unambiguously findable in subsequent
+images.  The binary search correlator takes features in one image and
+attempts to find them in subsequent images, altered slightly by
+vehicle motion.  Both operators make extensive use of versions of the
+pictures reduced by factors of 2, 4, 8, 16 etc. in linear dimension.
+The camera solver is given the location of at least five corresponding
+features in two pictures, and deduces the relative camera positions
+and orientations and the three dimensional locations of the
+features. More information about the solver may be found in [Gennery].
+
+	Peripheral routines include a camera calibrator which computes
+a two dimensional polynomial for correcting distortions of a camera
+when the camera is placed in front of a screen containing a square
+array of black spots on a white background.  Other operators sometimes
+used are a high pass filter, a high frequency noise remover, a
+histogram normalizer, a vertical sync loss corrector, a picture
+comparator and an operator which reduces pictures by other than powers
+of two.
+
+
+Interest Operator
+
+	This routine is used to acquire new features in a scene.  It
+tries to select a relatively uniform scattering, to minimize the
+probability that important obstacles will be missed, and also attempts
+to choose areas which can be found easily by the correlator.  Both
+goals are achieved by returning regions which are local maxima of a
+directional variance measure.  Featureless areas and simple edges
+(which have no variance in the direction of the edge) are avoided by
+this process.
+
+	Directional variance is measured over small square windows of
+typically 4 to 8 pixels on a side. Sums of squares of differences of
+pixels adjacent in each of four directions (horizontal, vertical and
+two diagonals) over the window are obtained. The variance of the
+window is the minimum of these four sums.
+
+	An earlier version of the algorithm computed this function
+over a grid of adjacent non-overlapping windows.  A window was
+declared a local maximum if it was larger than any of its eight
+immediate neighbors.  Interesting regions were sometimes missed by
+this arrangement when the high contrast parts straddled the boundaries
+of windows.
+
+	Performance has been improved by increasing the number of
+windows by a factor of four, including sets shifted half a window size
+horizontally, vertically and diagonally.  To be a local maximum, a
+window must now be the largest of the twenty five which overlap and
+contact it.
+
+	Since the variance measure depends on adjacent pixel
+differences, it responds to high frequency noise in the image. This
+undesirable effect is circumvented by applying the interest operator
+to a reduced version of the picture, where noise is lessened by the
+averaging.  The smaller image also means a faster program.  The
+standard procedure is to choose the power of two reduction in which
+the specified window size is reduced to 2 or 3 pixels on a side.  For
+a window size of 8 the operator is applied to the picture reduced
+twice, i.e. by a linear factor of 4.
+
+	The local maxima found are stored in an array, sorted in order
+of decreasing variance.
+
+	The entire process, critical parts of which are hand coded in
+machine language, on a typical 260 by 240 image using 8 by 8 windows
+takes about 75 milliseconds on the KL-10.
+
+
+Binary Search Correlator
+
+	Given a feature in one picture, this routine attempts to find
+the corresponding region in a second image.
+
+	The correlator is given a source position in the first
+picture, a rectangular search window (often the whole image) in the
+second picture, and and a feature window size n (8 is typical),
+representing the side of a square window.
+
+	The search uses a coarse to fine strategy, which begins in
+reduced versions of the pictures.  The order of reduction is chosen to
+make the smaller dimension of the search rectangle between n and 2n
+pixels. An n by n window in the shrunken source image, centered around
+the desired feature, is considered. Because this version of the image
+is so small, the window covers about 25% of the picture, if the search
+window is the entire picture. A correlation coefficient is calculated
+for each possible placement of the source window in the search area,
+quantizing the positioning to whole pixel steps.  If the search window
+is exactly 2n by 2n, there are (n+1)^2 positions. The one which
+results in the highest coefficient is used as the search area for the
+next level of refinement.
+
+	The process is repeated at the next lower order of reduction,
+i.e. with pictures that are linearly twice as large.  An n by n window
+is again centered around the location of the source feature, and is
+searched for in the area that corresponds to the winning window in the
+previous search, which expands to 2n by 2n at the new level of
+reduction.
+
+	This goes on in successively larger versions of the pictures
+until an n by n window is matched in the original unreduced images.
+
+	The program thus locates a huge general area around the
+feature in a very coarse version of the images, and successively
+refines the position, finding smaller and smaller areas in finer and
+finer representations. The work at each level is approximately that of
+finding an n by n window in a 2n by 2n area, and there are log[2](w/n)
+levels, where w is the smaller dimension of the search rectangle, in
+unreduced picture pixels.
+
