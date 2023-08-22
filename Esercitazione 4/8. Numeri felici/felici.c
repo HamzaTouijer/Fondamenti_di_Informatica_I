@@ -14,3 +14,8 @@ int felice(unsigned int num) {
 	}
 	return felice(res);
 }
+
+int main(void) {
+	unsigned int c = felice(7);
+	return 0;
+}
